@@ -1,0 +1,85 @@
+PMOS Pcell（基础版，无TAP和CDF）
+skill
+;============================================================
+; PMOS Pcell 基础版
+; 库名: Faker  单元名: PmosPcell
+; 参数: l(沟道长度), w(沟道宽度)
+;============================================================
+pcDefinePCell(
+   list(ddGetObj("Faker") "PmosPcell" "layout")  ; 指定Pcell位置：库Faker，单元PmosPcell，视图layout
+       (                                          ; 参数列表开始
+        (l "1.0u")                                ; 参数l，字符串类型，默认值"1.0u" (1微米)
+        (w "6.0u")                                ; 参数w，字符串类型，默认值"6.0u" (6微米)
+       )
+    let(((cv pcCellView))                         ; let块：cv绑定到当前Pcell的cellView
+      l=evalstring(l)*1e6                         ; 将字符串参数l求值并转换为数据库单位(微米)
+      w=evalstring(w)*1e6                         ; 同上转换w
+
+    ;------------ 1. 栅极 (POLY1) ------------
+    Gate=rodCreateRect(
+        ?cvId   cv                                 ; 目标cellView
+        ?layer "POLY1"                             ; 图层
+        ?width  l                                  ; 矩形宽度 = l (沟道长度方向)
+        ?length w+2*1.00                           ; 矩形长度 = w + 2.0 (两侧各超出1.0)
+        ?origin l/(-2):(w+2*1.00)/(-2)             ; 原点设在几何中心，使栅极居中
+            )
+
+    ;------------ 2. 有源区 (DIFF) ------------
+    DIFF=rodCreateRect(
+        ?cvId   cv
+        ?layer "DIFF"
+        ?width  l+2*1.20                           ; 宽度 = l + 2.4 (源漏各超出1.2)
+        ?length w                                   ; 长度 = w
+        ?origin (l+2*1.00)/(-2)-0.2:w/(-2)         ; 原点相对栅极偏移 -0.2，使DIFF与栅极居中
+            )
+
+    ;------------ 3. 源漏金属 (METAL1) + 接触孔阵列 ------------
+    SDPath=rodCreateRect(
+        ?cvId   cv
+        ?layer "METAL1"
+        ?width  1.20                                ; 每个金属块宽度1.2
+        ?length w                                   ; 长度 = w
+        ?origin (l+2*1.00)/(-2)-0.2:w/(-2)          ; 与DIFF同原点
+        ?elementsX 2                                ; X方向复制2次 → 源极和漏极
+        ?spaceX l                                   ; 复制间距 = l (栅极长度)，正好在栅极两侧
+        ?subRectArray                               ; 在金属内部嵌入接触孔阵列
+           list(
+                list(
+                ?layer "CONT"                       ; 接触孔层
+                ?width 0.50                         ; 孔宽度
+                ?length 0.50                        ; 孔长度
+                ?gap "distribute"                   ; 分布模式：均匀分布
+                ?lowerLeftOffsetX 0.30              ; 金属左下角向内偏移X
+                ?lowerLeftOffsetY 0.30              ; 金属左下角向内偏移Y
+                ?upperRightOffsetX -0.3             ; 金属右上角向内偏移X (负值表示从右边算)
+                ?upperRightOffsetY -0.3             ; 金属右上角向内偏移Y
+                ?spaceX            0.5              ; 孔列间距
+                ?spaceY            0.5              ; 孔行间距
+                     );End 1st subrectangle list
+               );End all subrectangle lists
+           );SD Path
+
+    ;------------ 4. P+注入层 (PIMP) ------------
+    PIMP=rodCreateRect(
+            ?cvId  cv
+            ?layer "PIMP"
+            ?fromObj DIFF                            ; 基于DIFF图形
+            ?size 0.80                               ; 向外扩展0.80
+                     )
+
+    ;------------ 5. N阱 (NWELL) ------------
+    NW=rodCreateRect(
+            ?cvId  cv
+            ?layer "NWELL"
+            ?fromObj PIMP                            ; 基于PIMP图形
+            ?size 0.20                               ; 再向外扩展0.20
+                     )
+
+    ;------------ 6. 标签 (TEXT) ------------
+    dbCreateLabel(cv "TEXT" 0:0 sprintf(nil "W=%Lu" w) "centerCenter" "R0" "roman" 0.5)
+        ; 在(0,0)创建标签，格式如"W=6.0"，居中对齐
+    dbCreateLabel(cv "TEXT" 0:-0.8 sprintf(nil "L=%Lu" l) "centerCenter" "R0" "roman" 0.5)
+        ; 在(0,-0.8)创建标签，格式如"L=1.0"
+
+           );let
+        );pcDefine
